@@ -65,17 +65,20 @@
       <canvas id="board" width="600" height="600" style="z-index:1; position:relative;"></canvas>
       <canvas id="fireworks" width="600" height="600" style="z-index:2; position:absolute; left:0; top:0; pointer-events:none; display:none;"></canvas>
     </div>
-    <div style="display:flex;flex-direction:column;align-items:flex-start;gap:32px;min-width:200px;">
-      <div id="status" style="margin-bottom:16px;">흑돌(●) 차례</div>
-      <div style="display:flex;align-items:center;gap:8px;">
-        <span style="font-size:28pt;font-weight:bold;color:#888;">타이머:</span>
-        <span id="timer" style="font-size:40pt; color:#00eaff; font-family:'Orbitron','Segoe UI',Arial,sans-serif; font-weight:bold;">10</span>
+      <div style="display:flex;flex-direction:column;align-items:flex-start;gap:32px;min-width:200px;">
+        <div id="status" style="margin-bottom:16px;">흑돌(●) 차례</div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:28pt;font-weight:bold;color:#888;">타이머:</span>
+          <span id="timer" style="font-size:40pt; color:#00eaff; font-family:'Orbitron','Segoe UI',Arial,sans-serif; font-weight:bold;">10</span>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:10px;">
+          <button onclick="undo()">무르기</button>
+          <button onclick="restart()">재시작</button>
+        </div>
       </div>
-    </div>
   </div>
   <div id="scoreboard">흑: <span id="blackScore">0</span>승 / 백: <span id="whiteScore">0</span>승</div>
-  <button onclick="undo()">무르기</button>
-  <button onclick="restart()">재시작</button>
+  <!-- 버튼이 타이머 아래로 이동됨 -->
   <script>
     const SIZE = 15;
     const CELL = 40;
