@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>오목 게임</title>
+  <style>
+    body {
+      background: linear-gradient(135deg, #232526 0%, #414345 100%);
+      color: #fff;
+      font-family: 'Segoe UI', 'Pretendard', Arial, sans-serif;
+      text-align: center;
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    h1 {
+      font-family: 'Orbitron', 'Segoe UI', Arial, sans-serif;
+      font-size: 2.2em;
+      margin-top: 32px;
+      margin-bottom: 10px;
+      color: #ffeb3b;
+      text-shadow: 0 2px 8px #000a;
+    }
+    #board {
+      background: #f5deb3;
+      margin: 30px auto 10px auto;
+      display: block;
+      border-radius: 12px;
+      border: 6px solid #b8860b;
+      box-shadow: 0 8px 32px #b8860b33, 0 2px 8px #000a;
+      cursor: pointer;
+    }
+    #status {
+      font-size: 1.3em;
+      margin: 10px;
+      color: #00eaff;
+      text-shadow: 0 2px 8px #000a;
+    }
+    button {
+      margin: 10px;
+      padding: 12px 32px;
+      font-size: 1.1em;
+      border: none;
+      border-radius: 8px;
+      background: linear-gradient(90deg, #ffeb3b 0%, #b8860b 100%);
+      color: #222;
+      font-weight: bold;
+      box-shadow: 0 2px 8px #b8860b44;
+      cursor: pointer;
+      transition: background 0.2s, color 0.2s, transform 0.1s;
+    }
+    button:hover {
+      background: linear-gradient(90deg, #b8860b 0%, #ffeb3b 100%);
+      color: #111;
+      transform: translateY(-2px) scale(1.04);
+    }
+  </style>
+</head>
+<body>
+  <h1>오목 게임 (Gomoku)</h1>
+  <div style="display:flex;justify-content:center;align-items:flex-start;gap:40px;">
+    <div style="position:relative; width:600px; height:600px;">
+      <canvas id="board" width="600" height="600" style="z-index:1; position:relative;"></canvas>
+      <canvas id="fireworks" width="600" height="600" style="z-index:2; position:absolute; left:0; top:0; pointer-events:none; display:none;"></canvas>
+    </div>
+    <div style="display:flex;flex-direction:column;align-items:flex-start;gap:32px;min-width:200px;">
+      <div id="status" style="margin-bottom:16px;">흑돌(●) 차례</div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:28pt;font-weight:bold;color:#888;">타이머:</span>
+        <span id="timer" style="font-size:40pt; color:#00eaff; font-family:'Orbitron','Segoe UI',Arial,sans-serif; font-weight:bold;">10</span>
+      </div>
+    </div>
+  </div>
+  <div id="scoreboard">흑: <span id="blackScore">0</span>승 / 백: <span id="whiteScore">0</span>승</div>
+  <button onclick="undo()">무르기</button>
+  <button onclick="restart()">재시작</button>
+  <script>
+    const SIZE = 15;
+    const CELL = 40;
+    const RADIUS = 15;
+  const board = Array.from({length: SIZE}, () => Array(SIZE).fill(0));
+  let turn = 1; // 1: 흑, 2: 백
+  let gameOver = false;
+  let blackScore = 0, whiteScore = 0;
+  let matchOver = false;
+  let moveStack = [];
+  let timer = null;
+  let timeLeft = 10;
+  const timerDiv = document.getElementById('timer');
+  const canvas = document.getElementById('board');
+  const ctx = canvas.getContext('2d');
+  const statusDiv = document.getElementById('status');
+  const blackScoreSpan = document.getElementById('blackScore');
+  const whiteScoreSpan = document.getElementById('whiteScore');
+  const fireworks = document.getElementById('fireworks');
+  const fwCtx = fireworks.getContext('2d');
+
+    function drawBoard() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      // 바둑판
+      ctx.fillStyle = '#f5deb3';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.strokeStyle = '#b8860b';
+      ctx.lineWidth = 2;
+      for (let i = 0; i < SIZE; i++) {
+        ctx.beginPath();
+        ctx.moveTo(CELL/2, CELL/2 + i*CELL);
+        ctx.lineTo(CELL/2 + (SIZE-1)*CELL, CELL/2 + i*CELL);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(CELL/2 + i*CELL, CELL/2);
+        ctx.lineTo(CELL/2 + i*CELL, CELL/2 + (SIZE-1)*CELL);
+        ctx.stroke();
+      }
+      // 포인트
+      const points = [3, 7, 11];
+      ctx.fillStyle = '#222';
+      for (let px of points) for (let py of points) {
+        ctx.beginPath();
+        ctx.arc(CELL/2 + px*CELL, CELL/2 + py*CELL, 5, 0, 2*Math.PI);
+        ctx.fill();
+      }
+      // 돌
+      for (let y = 0; y < SIZE; y++) {
+        for (let x = 0; x < SIZE; x++) {
+          if (board[y][x]) drawStone(x, y, board[y][x]);
+        }
+      }
+    }
+
+    function drawStone(x, y, color) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(CELL/2 + x*CELL, CELL/2 + y*CELL, RADIUS, 0, 2*Math.PI);
+      ctx.shadowColor = color === 1 ? '#222' : '#fff';
+      ctx.shadowBlur = 8;
+      ctx.fillStyle = color === 1 ? '#222' : '#fff';
+      ctx.strokeStyle = '#888';
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    canvas.addEventListener('click', e => {
+      if (gameOver || matchOver) return;
+      const rect = canvas.getBoundingClientRect();
+      const x = Math.round((e.clientX - rect.left - CELL/2) / CELL);
+      const y = Math.round((e.clientY - rect.top - CELL/2) / CELL);
+      if (x < 0 || x >= SIZE || y < 0 || y >= SIZE) return;
+      if (board[y][x] !== 0) return;
+      placeStone(x, y, turn);
+    });
+
+    function placeStone(x, y, color) {
+      if (board[y][x] !== 0) return;
+      board[y][x] = color;
+      moveStack.push({x, y, color});
+      drawBoard();
+      stopTimer();
+      if (checkWin(x, y, color)) {
+        if (color === 1) blackScore++; else whiteScore++;
+        blackScoreSpan.textContent = blackScore;
+        whiteScoreSpan.textContent = whiteScore;
+        statusDiv.textContent = (color === 1 ? '흑돌(●)' : '백돌(○)') + ' 승리!';
+        gameOver = true;
+        showFireworks();
+        timerDiv.textContent = '';
+        if (blackScore === 2 || whiteScore === 2) {
+          matchOver = true;
+          setTimeout(() => {
+            statusDiv.textContent = (blackScore === 2 ? '흑돌(●)' : '백돌(○)') + ' 최종 승리!';
+          }, 1200);
+        }
+      } else {
+        turn = 3 - color;
+        statusDiv.textContent = (turn === 1 ? '흑돌(●)' : '백돌(○)') + ' 차례';
+        startTimer();
+      }
+    }
+
+    function undo() {
+      if (moveStack.length === 0 || gameOver || matchOver) return;
+      const last = moveStack.pop();
+      board[last.y][last.x] = 0;
+      turn = last.color;
+      statusDiv.textContent = (turn === 1 ? '흑돌(●)' : '백돌(○)') + ' 차례';
+      drawBoard();
+      stopTimer();
+      startTimer();
+    }
+
+    function checkWin(x, y, color) {
+      function count(dx, dy) {
+        let cnt = 1;
+        for (let d = 1; d < 5; d++) {
+          let nx = x + dx*d, ny = y + dy*d;
+          if (nx < 0 || nx >= SIZE || ny < 0 || ny >= SIZE) break;
+          if (board[ny][nx] === color) cnt++;
+          else break;
+        }
+        for (let d = 1; d < 5; d++) {
+          let nx = x - dx*d, ny = y - dy*d;
+          if (nx < 0 || nx >= SIZE || ny < 0 || ny >= SIZE) break;
+          if (board[ny][nx] === color) cnt++;
+          else break;
+        }
+        return cnt;
+      }
+      return (
+        count(1,0) >= 5 ||
+        count(0,1) >= 5 ||
+        count(1,1) >= 5 ||
+        count(1,-1) >= 5
+      );
+    }
+
+    function restart() {
+      for (let y = 0; y < SIZE; y++) for (let x = 0; x < SIZE; x++) board[y][x] = 0;
+      turn = 1;
+      gameOver = false;
+      matchOver = false;
+      moveStack = [];
+      statusDiv.textContent = '흑돌(●) 차례';
+      drawBoard();
+      fireworks.style.display = 'none';
+      stopTimer();
+      timerDiv.textContent = '10';
+      timerDiv.style.color = '#00eaff';
+      startTimer();
+    }
+
+    function startTimer() {
+      timeLeft = 10;
+      updateTimerUI();
+      timer = setInterval(() => {
+        timeLeft--;
+        updateTimerUI();
+        if (timeLeft <= 0) {
+          stopTimer();
+          setTimeout(() => {
+            randomMove(turn);
+          }, 300);
+        }
+      }, 1000);
+    }
+
+    function stopTimer() {
+      if (timer) clearInterval(timer);
+      timer = null;
+    }
+
+    function updateTimerUI() {
+      timerDiv.textContent = timeLeft;
+      if (timeLeft <= 3) {
+        timerDiv.style.color = '#ff4444';
+      } else {
+        timerDiv.style.color = '#00eaff';
+      }
+    }
+
+    function randomMove(color) {
+      if (gameOver || matchOver) return;
+      // 빈 칸 목록 생성
+      let empties = [];
+      for (let y = 0; y < SIZE; y++) for (let x = 0; x < SIZE; x++) if (board[y][x] === 0) empties.push({x, y});
+      if (empties.length === 0) return;
+      let idx = Math.floor(Math.random() * empties.length);
+      placeStone(empties[idx].x, empties[idx].y, color);
+    }
+
+    // 폭죽 효과
+    function showFireworks() {
+      fireworks.style.display = 'block';
+      let allParticles = [];
+      // 3개의 폭죽 위치와 색상 다양화
+      const centers = [
+        {x: 180, y: 220, base: 120},
+        {x: 420, y: 220, base: 120},
+        {x: 300, y: 400, base: 140}
+      ];
+      for (let f = 0; f < 3; f++) {
+        let particles = [];
+        let center = centers[f];
+        let colorBase = Math.floor(Math.random()*360);
+        let count = 32 + Math.floor(Math.random()*16);
+        for (let j = 0; j < count; j++) {
+          const angle = (Math.PI * 2 / count) * j;
+          const speed = 2.5 + Math.random() * 2.5;
+          particles.push({
+            x: center.x,
+            y: center.y,
+            vx: Math.cos(angle) * speed * (0.8 + Math.random()*0.6),
+            vy: Math.sin(angle) * speed * (0.8 + Math.random()*0.6),
+            color: `hsl(${(colorBase + j*360/count)%360},100%,${55+Math.random()*25}%)`,
+            alpha: 1,
+            size: 3 + Math.random()*3
+          });
+        }
+        allParticles = allParticles.concat(particles);
+      }
+      let frame = 0;
+      function animate() {
+        fwCtx.clearRect(0,0,600,600);
+        for (const p of allParticles) {
+          fwCtx.globalAlpha = p.alpha;
+          fwCtx.beginPath();
+          fwCtx.arc(p.x, p.y, p.size, 0, 2*Math.PI);
+          fwCtx.fillStyle = p.color;
+          fwCtx.shadowColor = p.color;
+          fwCtx.shadowBlur = 16;
+          fwCtx.fill();
+        }
+        for (const p of allParticles) {
+          p.x += p.vx;
+          p.y += p.vy;
+          p.vy += 0.06 + Math.random()*0.03;
+          p.alpha -= 0.012 + Math.random()*0.008;
+        }
+        allParticles = allParticles.filter(p => p.alpha > 0);
+        if (allParticles.length > 0 && frame < 120) {
+          requestAnimationFrame(animate);
+        } else {
+          fwCtx.clearRect(0,0,600,600);
+          fireworks.style.display = 'none';
+        }
+        frame++;
+      }
+      animate();
+    }
+
+  drawBoard();
+  startTimer();
+  </script>
+</body>
+</html>
